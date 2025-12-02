@@ -5,3 +5,4 @@ out/
 reinstall.ps1
 scripts/
 icocmdrun.ico
+package-lock.json
