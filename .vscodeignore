@@ -1,0 +1,8 @@
+.vscode/**
+node_modules/**
+src/**
+*.vsix
+tsconfig.json
+reinstall.ps1
+scripts/**
+icocmdrun.ico

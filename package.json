@@ -1,0 +1,179 @@
+{
+  "name": "cmdrun",
+  "displayName": "CMDRun",
+  "description": "Quick command launcher with sidebar panel. Run terminal commands, open URLs, launch external programs. Supports hierarchical groups, drag & drop reordering, and auto-close terminal option.",
+  "version": "0.0.1",
+  "publisher": "YaroslavHorokhov",
+  "author": {
+    "name": "Yaroslav Horokhov"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/YaroslavHorokhov/CMDRun"
+  },
+  "homepage": "https://github.com/YaroslavHorokhov/CMDRun#readme",
+  "bugs": {
+    "url": "https://github.com/YaroslavHorokhov/CMDRun/issues"
+  },
+  "icon": "ico.png",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "command",
+    "runner",
+    "terminal",
+    "launcher",
+    "sidebar"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "cmdrun-sidebar",
+          "title": "CMDRun",
+          "icon": "icocmdrun.svg"
+        }
+      ]
+    },
+    "views": {
+      "cmdrun-sidebar": [
+        {
+          "id": "cmdrunList",
+          "name": "Commands"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "cmdrun.add",
+        "title": "Add Command",
+        "icon": "$(add)"
+      },
+      {
+        "command": "cmdrun.edit",
+        "title": "Edit Command",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "cmdrun.delete",
+        "title": "Delete Command",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "cmdrun.run",
+        "title": "Run Command",
+        "icon": "$(play)"
+      },
+      {
+        "command": "cmdrun.openConfig",
+        "title": "Open Config",
+        "icon": "$(settings-gear)"
+      },
+      {
+        "command": "cmdrun.collapseAll",
+        "title": "Collapse All",
+        "icon": "$(collapse-all)"
+      },
+      {
+        "command": "cmdrun.expandAll",
+        "title": "Expand All",
+        "icon": "$(expand-all)"
+      },
+      {
+        "command": "cmdrun.refresh",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "cmdrun.collapseGroup",
+        "title": "Collapse",
+        "icon": "$(chevron-up)"
+      },
+      {
+        "command": "cmdrun.addToGroup",
+        "title": "Add Command to Group",
+        "icon": "$(add)"
+      },
+      {
+        "command": "cmdrun.duplicate",
+        "title": "Duplicate Command",
+        "icon": "$(copy)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "cmdrun.openConfig",
+          "when": "view == cmdrunList",
+          "group": "navigation@1"
+        },
+        {
+          "command": "cmdrun.add",
+          "when": "view == cmdrunList",
+          "group": "navigation@2"
+        },
+        {
+          "command": "cmdrun.refresh",
+          "when": "view == cmdrunList",
+          "group": "navigation@3"
+        },
+        {
+          "command": "cmdrun.collapseAll",
+          "when": "view == cmdrunList",
+          "group": "navigation@4"
+        },
+        {
+          "command": "cmdrun.expandAll",
+          "when": "view == cmdrunList",
+          "group": "navigation@5"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "cmdrun.run",
+          "when": "view == cmdrunList && viewItem == commandItem",
+          "group": "inline"
+        },
+        {
+          "command": "cmdrun.collapseGroup",
+          "when": "view == cmdrunList && viewItem == groupItem",
+          "group": "inline"
+        },
+        {
+          "command": "cmdrun.addToGroup",
+          "when": "view == cmdrunList && viewItem == groupItem"
+        },
+        {
+          "command": "cmdrun.edit",
+          "when": "view == cmdrunList && viewItem == commandItem"
+        },
+        {
+          "command": "cmdrun.duplicate",
+          "when": "view == cmdrunList && viewItem == commandItem"
+        },
+        {
+          "command": "cmdrun.delete",
+          "when": "view == cmdrunList && viewItem == commandItem"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "npx @vscode/vsce package",
+    "reinstall": "npm run compile && npm run package && code --install-extension cmdrun-0.0.1.vsix --force"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.3.0"
+  }
+}
