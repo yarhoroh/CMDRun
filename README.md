@@ -8,6 +8,14 @@ Quick launcher for terminal commands, URLs, and external programs from the sideb
 
 ---
 
+## Screenshots
+
+| Command Panel | Edit Command |
+|:-------------:|:------------:|
+| ![List](img/List.png) | ![Edit Command](img/EditCommand.png) |
+
+---
+
 ## Features
 
 ### 🖥️ Terminal Commands
