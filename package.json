@@ -10,11 +10,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/YaroslavHorokhov/CMDRun"
+    "url": "https://github.com/yarhoroh/CMDRun"
   },
-  "homepage": "https://github.com/YaroslavHorokhov/CMDRun#readme",
+  "homepage": "https://github.com/yarhoroh/CMDRun#readme",
   "bugs": {
-    "url": "https://github.com/YaroslavHorokhov/CMDRun/issues"
+    "url": "https://github.com/yarhoroh/CMDRun/issues"
   },
   "icon": "ico.png",
   "engines": {
