@@ -129,4 +129,6 @@ Organize commands into nested groups.
 
 ---
 
+**GitHub:** [github.com/yarhoroh/CMDRun](https://github.com/yarhoroh/CMDRun)
+
 Made with ⚡ for productivity
