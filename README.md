@@ -86,44 +86,27 @@ Organize commands into nested groups.
 }
 ```
 
-## Full Example
+### 🔐 Environment Variables
+Pass environment variables to terminal commands.
 
 ```json
 {
-  "commands": [
-    {
-      "name": "🚀 Start Dev",
-      "group": "Project",
-      "commands": ["npm run dev"],
-      "urls": [{ "url": "http://localhost:5173" }],
-      "autoClose": true
-    },
-    {
-      "name": "🔨 Build",
-      "group": "Project",
-      "commands": ["npm run build"],
-      "terminalProfile": "PowerShell",
-      "autoClose": true
-    },
-    {
-      "name": "📧 Outlook",
-      "group": "Apps",
-      "programs": [{
-        "path": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-        "args": "--app=\"https://outlook.office365.com\""
-      }]
-    },
-    {
-      "name": "📝 Notepad + Calc",
-      "group": "Apps",
-      "programs": [
-        { "path": "notepad.exe" },
-        { "path": "calc.exe" }
-      ]
-    }
-  ]
+  "name": "Run with Config",
+  "commands": ["echo $env:API_URL", "npm start"],
+  "env": {
+    "API_URL": "https://api.example.com",
+    "DEBUG": "true"
+  }
 }
 ```
+
+### 🔍 Search & Filter
+Filter commands by name, group, command text, URL or program path. Click the search icon in the panel header.
+
+### 📦 Import / Export
+Share command configurations between projects:
+- **Export** - Save current commands to a `.cmdrun.json` file
+- **Import** - Load commands from file (merge or replace)
 
 ## Config Location
 
