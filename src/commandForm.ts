@@ -383,6 +383,7 @@ export class CommandFormPanel {
         </select>
       </div>
       <div id="commandsContainer" class="array-container"></div>
+<div class="hint">Use <code>{{VAR}}</code> to reference env variables. Auto-converts to !VAR! (CMD), $env:VAR (PS), $VAR (Bash).</div>     
       <div style="display: flex; align-items: center; gap: 12px; margin-top: 6px; flex-wrap: wrap;">
         <button type="button" class="btn-add" onclick="addCommand()">+ Add Command</button>
         <label class="checkbox-label" style="font-weight: normal;">
@@ -394,7 +395,6 @@ export class CommandFormPanel {
           Run as Admin
         </label>` : ''}
       </div>
-      <div class="hint">Commands will run sequentially in terminal.</div>     
     </div>
 
     <div class="form-group">

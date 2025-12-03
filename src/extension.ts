@@ -51,9 +51,16 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Run terminal commands if present
     if (cmdData.commands?.length) {
+      // Convert {{VAR}} syntax to shell-specific format
+      // CMD uses !VAR! with /v:on (delayed expansion) because %VAR% expands before set runs
+      const toCmd = (cmd: string) => cmd.replace(/\{\{(\w+)\}\}/g, '!$1!');
+      const toPs = (cmd: string) => cmd.replace(/\{\{(\w+)\}\}/g, '$env:$1');
+      const toBash = (cmd: string) => cmd.replace(/\{\{(\w+)\}\}/g, '$$$1');
+
       // Different separators for different shells
-      const cmdJoined = cmdData.commands.join(' && '); // For CMD and Bash
-      const psJoined = cmdData.commands.join('; '); // For PowerShell (sequential execution)
+      const cmdJoined = cmdData.commands.map(toCmd).join(' && '); // For CMD
+      const psJoined = cmdData.commands.map(toPs).join('; '); // For PowerShell
+      const bashJoined = cmdData.commands.map(toBash).join(' && '); // For Bash
 
       // External terminal with optional admin elevation (Windows only for admin)
       if (cmdData.externalTerminal) {
@@ -71,8 +78,30 @@ export function activate(context: vscode.ExtensionContext) {
           const isBash = termPath.includes('bash');
           const isWindowsTerminal = termPath === 'wt' || termPath.includes('wt.exe');
 
+          // Build env setup strings for different shells
+          const psEnvSetup = cmdData.env
+            ? Object.entries(cmdData.env)
+                .map(([k, v]) => `$env:${k}='${v.replace(/'/g, "''")}'`)
+                .join('; ') + '; '
+            : '';
+          const cmdEnvSetup = cmdData.env
+            ? Object.entries(cmdData.env)
+                .map(([k, v]) => `set "${k}=${v}"`)
+                .join(' && ') + ' && '
+            : '';
+          const bashEnvExport = cmdData.env
+            ? Object.entries(cmdData.env)
+                .map(([k, v]) => `export ${k}="${v.replace(/"/g, '\\"')}"`)
+                .join('; ') + '; '
+            : '';
+
+          // Commands with env variables prepended
+          const psWithEnv = psEnvSetup + psJoined;
+          const cmdWithEnv = cmdEnvSetup + cmdJoined;
+          const bashWithEnv = bashEnvExport + bashJoined;
+
           // Choose correct command format based on shell
-          const shellCommands = (isPowerShell && !isWindowsTerminal) ? psJoined : cmdJoined;
+          const shellCommands = (isPowerShell && !isWindowsTerminal) ? psWithEnv : cmdWithEnv;
 
           if (cmdData.runAsAdmin) {
             // Run as admin - use PowerShell Start-Process with RunAs verb
@@ -106,54 +135,67 @@ export function activate(context: vscode.ExtensionContext) {
             // Regular external terminal (no admin)
             // /k keeps window open, /c closes after command
             const cmdSwitch = cmdData.autoClose ? '/c' : '/k';
-            const psSwitch = cmdData.autoClose ? '-Command' : '-NoExit -Command';
 
             if (isWindowsTerminal) {
-              // Windows Terminal - opens cmd by default
-              spawn('wt', ['cmd', cmdSwitch, cmdJoined], { detached: true, stdio: 'ignore', shell: true }).unref();
+              // Windows Terminal - opens cmd with /v:on for delayed expansion
+              spawn('wt', ['cmd', '/v:on', cmdSwitch, cmdWithEnv], { detached: true, stdio: 'ignore', shell: true }).unref();
             } else if (isPowerShell) {
-              // PowerShell - use semicolon separator
+              // PowerShell - use semicolon separator with env
               if (cmdData.autoClose) {
-                spawn('cmd', ['/c', 'start', termPath, '-Command', psJoined], { detached: true, stdio: 'ignore', shell: true }).unref();
+                spawn('cmd', ['/c', 'start', termPath, '-Command', psWithEnv], { detached: true, stdio: 'ignore', shell: true }).unref();
               } else {
-                spawn('cmd', ['/c', 'start', termPath, '-NoExit', '-Command', psJoined], { detached: true, stdio: 'ignore', shell: true }).unref();
+                spawn('cmd', ['/c', 'start', termPath, '-NoExit', '-Command', psWithEnv], { detached: true, stdio: 'ignore', shell: true }).unref();
               }
             } else if (isBash) {
-              // Git Bash
+              // Git Bash with env exports
               if (cmdData.autoClose) {
-                spawn('cmd', ['/c', 'start', termPath, '-c', cmdJoined], { detached: true, stdio: 'ignore', shell: true }).unref();
+                spawn('cmd', ['/c', 'start', termPath, '-c', bashWithEnv], { detached: true, stdio: 'ignore', shell: true }).unref();
               } else {
-                spawn('cmd', ['/c', 'start', termPath, '-c', `${cmdJoined}; read -p 'Press Enter to close...'`], { detached: true, stdio: 'ignore', shell: true }).unref();
+                spawn('cmd', ['/c', 'start', termPath, '-c', `${bashWithEnv}; read -p 'Press Enter to close...'`], { detached: true, stdio: 'ignore', shell: true }).unref();
               }
             } else {
-              // CMD (default)
-              spawn('cmd', ['/c', 'start', 'cmd', cmdSwitch, cmdJoined], { detached: true, stdio: 'ignore', shell: true }).unref();
+              // CMD (default) with env - start new cmd window with /v:on for delayed expansion
+              const { exec } = require('child_process');
+              exec(`start cmd /v:on ${cmdSwitch} "${cmdWithEnv}"`);
             }
           }
         } else if (process.platform === 'darwin') {
-          // macOS: open Terminal.app or iTerm
-          const escaped = cmdJoined.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/'/g, "'\\''");
+          // macOS: open Terminal.app or iTerm (uses bash)
+          const escaped = bashJoined.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/'/g, "'\\''");
+          // Build env export string for macOS
+          const envExports = cmdData.env
+            ? Object.entries(cmdData.env)
+                .map(([k, v]) => `export ${k}=\\"${v.replace(/"/g, '\\\\"')}\\"`)
+                .join('; ') + '; '
+            : '';
           if (selectedProfile?.name === 'iTerm2') {
-            exec(`osascript -e 'tell app "iTerm" to create window with default profile command "${escaped}"'`);
+            exec(`osascript -e 'tell app "iTerm" to create window with default profile command "${envExports}${escaped}"'`);
           } else {
-            exec(`osascript -e 'tell app "Terminal" to do script "${escaped}"'`);
+            exec(`osascript -e 'tell app "Terminal" to do script "${envExports}${escaped}"'`);
           }
         } else {
           // Linux - use selected terminal or try common ones
-          const escaped = cmdJoined.replace(/"/g, '\\"').replace(/'/g, "'\\''");
+          const escaped = bashJoined.replace(/"/g, '\\"').replace(/'/g, "'\\''");
           const termPath = selectedProfile?.path || 'gnome-terminal';
+          // Merge env with process.env for Linux spawn
+          const spawnEnv = cmdData.env ? { ...process.env, ...cmdData.env } : undefined;
 
           if (termPath === 'gnome-terminal') {
-            spawn('gnome-terminal', ['--', 'bash', '-c', `${escaped}; exec bash`], { detached: true, stdio: 'ignore' }).unref();
+            spawn('gnome-terminal', ['--', 'bash', '-c', `${escaped}; exec bash`], { detached: true, stdio: 'ignore', env: spawnEnv }).unref();
           } else if (termPath === 'konsole') {
-            spawn('konsole', ['-e', 'bash', '-c', `${escaped}; exec bash`], { detached: true, stdio: 'ignore' }).unref();
+            spawn('konsole', ['-e', 'bash', '-c', `${escaped}; exec bash`], { detached: true, stdio: 'ignore', env: spawnEnv }).unref();
           } else if (termPath === 'xfce4-terminal') {
-            spawn('xfce4-terminal', ['-e', `bash -c '${escaped}; exec bash'`], { detached: true, stdio: 'ignore' }).unref();
+            spawn('xfce4-terminal', ['-e', `bash -c '${escaped}; exec bash'`], { detached: true, stdio: 'ignore', env: spawnEnv }).unref();
           } else if (termPath === 'xterm') {
-            spawn('xterm', ['-e', 'bash', '-c', `${escaped}; exec bash`], { detached: true, stdio: 'ignore' }).unref();
+            spawn('xterm', ['-e', 'bash', '-c', `${escaped}; exec bash`], { detached: true, stdio: 'ignore', env: spawnEnv }).unref();
           } else {
-            // Fallback
-            exec(`${termPath} -e bash -c "${escaped}; exec bash"`);
+            // Fallback - use env export in command for exec
+            const envExports = cmdData.env
+              ? Object.entries(cmdData.env)
+                  .map(([k, v]) => `export ${k}="${v.replace(/"/g, '\\"')}"`)
+                  .join('; ') + '; '
+              : '';
+            exec(`${termPath} -e bash -c "${envExports}${escaped}; exec bash"`);
           }
         }
       } else {
@@ -166,8 +208,8 @@ export function activate(context: vscode.ExtensionContext) {
 
         terminal.show();
 
-        // VS Code terminal on Windows uses PowerShell, so use semicolon
-        const internalCommands = process.platform === 'win32' ? psJoined : cmdJoined;
+        // VS Code terminal on Windows uses PowerShell, Linux/Mac uses bash
+        const internalCommands = process.platform === 'win32' ? psJoined : bashJoined;
 
         if (cmdData.autoClose) {
           // Platform-specific autoClose handling
@@ -176,7 +218,7 @@ export function activate(context: vscode.ExtensionContext) {
             terminal.sendText(`try { ${psJoined} } finally { exit }`);
           } else {
             // Bash (Linux/Mac): trap for Ctrl+C, then run commands and exit
-            terminal.sendText(`trap 'exit' INT; ${cmdJoined}; exit`);
+            terminal.sendText(`trap 'exit' INT; ${bashJoined}; exit`);
           }
         } else {
           terminal.sendText(internalCommands);

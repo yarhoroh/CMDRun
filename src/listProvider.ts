@@ -34,71 +34,114 @@ export interface CommandData {
   args?: string[]; // deprecated, for backward compatibility
 }
 
-// Get available terminal profiles from system
+// Cache for terminal profiles
+let cachedProfiles: TerminalProfile[] | null = null;
+
+// Find executable on Windows using 'where' command (fast)
+function findExeOnWindows(execs: string[]): string | null {
+  const { execSync } = require('child_process');
+  for (const exe of execs) {
+    try {
+      const result = execSync(`where ${exe}`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'], timeout: 1000 });
+      const lines = result.split('\n').map((l: string) => l.trim()).filter((l: string) => l);
+      // For bash.exe, prefer Git path over system32 (WSL)
+      if (exe === 'bash.exe' || exe === 'sh.exe') {
+        const gitPath = lines.find((l: string) => l.toLowerCase().includes('git'));
+        if (gitPath) return gitPath;
+      }
+      if (lines[0]) return lines[0];
+    } catch { /* not found */ }
+  }
+  return null;
+}
+
+// Find executable in PATH on Linux/macOS
+function findExeInPath(exe: string): string | null {
+  const { execSync } = require('child_process');
+  try {
+    const result = execSync(`which ${exe}`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'], timeout: 500 });
+    return result.trim() || null;
+  } catch { return null; }
+}
+
+// Get available terminal profiles - auto-detect + VS Code settings
 export function getTerminalProfiles(): TerminalProfile[] {
+  // Return cached if available
+  if (cachedProfiles) return cachedProfiles;
+
   const profiles: TerminalProfile[] = [];
+  const config = vscode.workspace.getConfiguration('terminal.integrated');
+  const fs = require('fs');
+  const path = require('path');
 
-  if (process.platform === 'win32') {
-    // Windows terminals
-    const fs = require('fs');
-    const path = require('path');
+  // Helper to add profile if not already exists (by name or path)
+  const addProfile = (name: string, profilePath: string, args: string[] = []) => {
+    if (typeof profilePath !== 'string' || !profilePath) return;
+    // Skip WSL profiles
+    const lowerName = name.toLowerCase();
+    const lowerPath = profilePath.toLowerCase();
+    if (lowerName.includes('wsl') || lowerName.includes('ubuntu') || lowerName.includes('debian')) return;
+    if (lowerPath.includes('system32\\bash') || lowerPath.includes('system32\\wsl')) return;
+    // Skip duplicates by name or path
+    const normPath = profilePath.toLowerCase().replace(/\\/g, '/');
+    if (profiles.find(p => p.name === name || p.path.toLowerCase().replace(/\\/g, '/') === normPath)) return;
+    profiles.push({ name, path: profilePath, args });
+  };
 
-    // Command Prompt - always available
-    profiles.push({ name: 'Command Prompt', path: 'cmd.exe', args: ['/k'] });
+  // 1. Get profiles from VS Code settings first
+  const platformKey = process.platform === 'win32' ? 'windows'
+    : process.platform === 'darwin' ? 'osx' : 'linux';
+  const platformProfiles = config.get<Record<string, any>>(`profiles.${platformKey}`) || {};
 
-    // PowerShell - always available on modern Windows
-    profiles.push({ name: 'PowerShell', path: 'powershell.exe', args: ['-NoExit', '-Command'] });
-
-    // PowerShell 7+ (pwsh)
-    const pwshPaths = [
-      path.join(process.env.ProgramFiles || '', 'PowerShell', '7', 'pwsh.exe'),
-      path.join(process.env['ProgramFiles(x86)'] || '', 'PowerShell', '7', 'pwsh.exe'),
-      path.join(process.env.LOCALAPPDATA || '', 'Microsoft', 'WindowsApps', 'pwsh.exe')
-    ];
-    for (const p of pwshPaths) {
-      if (fs.existsSync(p)) {
-        profiles.push({ name: 'PowerShell 7', path: p, args: ['-NoExit', '-Command'] });
-        break;
-      }
+  for (const [name, profile] of Object.entries(platformProfiles)) {
+    if (profile && typeof profile === 'object' && profile.path) {
+      addProfile(name, profile.path, profile.args || []);
     }
-
-    // Git Bash
-    const gitBashPaths = [
-      path.join(process.env.ProgramFiles || '', 'Git', 'bin', 'bash.exe'),
-      path.join(process.env['ProgramFiles(x86)'] || '', 'Git', 'bin', 'bash.exe'),
-      'C:\\Program Files\\Git\\bin\\bash.exe',
-      'C:\\Program Files (x86)\\Git\\bin\\bash.exe'
-    ];
-    for (const p of gitBashPaths) {
-      if (fs.existsSync(p)) {
-        profiles.push({ name: 'Git Bash', path: p, args: ['-c'] });
-        break;
-      }
-    }
-
-    // Windows Terminal (if installed, use 'wt' command)
-    const wtPaths = [
-      path.join(process.env.LOCALAPPDATA || '', 'Microsoft', 'WindowsApps', 'wt.exe')
-    ];
-    for (const p of wtPaths) {
-      if (fs.existsSync(p)) {
-        profiles.push({ name: 'Windows Terminal', path: 'wt', args: ['-d', '.', 'cmd', '/k'] });
-        break;
-      }
-    }
-  } else if (process.platform === 'darwin') {
-    // macOS terminals
-    profiles.push({ name: 'Terminal', path: 'Terminal.app', args: [] });
-    profiles.push({ name: 'iTerm2', path: 'iTerm.app', args: [] });
-  } else {
-    // Linux terminals
-    profiles.push({ name: 'GNOME Terminal', path: 'gnome-terminal', args: ['--'] });
-    profiles.push({ name: 'Konsole', path: 'konsole', args: ['-e'] });
-    profiles.push({ name: 'xterm', path: 'xterm', args: ['-e'] });
-    profiles.push({ name: 'xfce4-terminal', path: 'xfce4-terminal', args: ['-e'] });
   }
 
+  // 2. Auto-detect shells
+  if (process.platform === 'win32') {
+    const candidates = [
+      { name: 'PowerShell 7', execs: ['pwsh.exe'] },
+      { name: 'PowerShell', execs: ['powershell.exe'] },
+      { name: 'Command Prompt', execs: ['cmd.exe'] },
+      { name: 'Git Bash', execs: ['bash.exe', 'sh.exe'] },
+    ];
+    for (const c of candidates) {
+      const found = findExeOnWindows(c.execs);
+      if (found) addProfile(c.name, found, []);
+    }
+  } else {
+    // macOS / Linux - read /etc/shells
+    try {
+      const shells = fs.readFileSync('/etc/shells', 'utf8')
+        .split(/\r?\n/)
+        .map((l: string) => l.trim())
+        .filter((l: string) => l && !l.startsWith('#'));
+      for (const s of shells) {
+        if (fs.existsSync(s)) {
+          const name = path.basename(s);
+          addProfile(name, s, []);
+        }
+      }
+    } catch {
+      // Fallback
+      const fallbacks = ['bash', 'zsh', 'fish', 'sh'];
+      for (const exe of fallbacks) {
+        const p = findExeInPath(exe);
+        if (p) addProfile(exe, p, []);
+      }
+    }
+  }
+
+  // Cache result
+  cachedProfiles = profiles;
   return profiles;
+}
+
+// Clear cache (call on refresh)
+export function clearTerminalProfilesCache(): void {
+  cachedProfiles = null;
 }
 
 interface ConfigFile {

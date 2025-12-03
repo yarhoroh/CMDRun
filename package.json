@@ -2,7 +2,7 @@
   "name": "cmdrun",
   "displayName": "CMDRun",
   "description": "Quick command launcher with sidebar panel. Run terminal commands, open URLs, launch external programs. Supports hierarchical groups, drag & drop reordering, and auto-close terminal option.",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "publisher": "YaroslavHorokhov",
   "author": {
     "name": "Yaroslav Horokhov"
