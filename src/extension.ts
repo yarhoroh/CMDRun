@@ -12,6 +12,7 @@ export function activate(context: vscode.ExtensionContext) {
     dragAndDropController: listProvider,
     canSelectMany: true
   });
+
   context.subscriptions.push(treeView);
 
   // Track expand/collapse state
@@ -68,7 +69,6 @@ export function activate(context: vscode.ExtensionContext) {
           const termPath = selectedProfile?.path || 'cmd.exe';
           const isPowerShell = termPath.includes('powershell') || termPath.includes('pwsh');
           const isBash = termPath.includes('bash');
-          const isWsl = termPath.includes('wsl');
           const isWindowsTerminal = termPath === 'wt' || termPath.includes('wt.exe');
 
           // Choose correct command format based on shell
@@ -125,13 +125,6 @@ export function activate(context: vscode.ExtensionContext) {
               } else {
                 spawn('cmd', ['/c', 'start', termPath, '-c', `${cmdJoined}; read -p 'Press Enter to close...'`], { detached: true, stdio: 'ignore', shell: true }).unref();
               }
-            } else if (isWsl) {
-              // WSL
-              if (cmdData.autoClose) {
-                spawn('cmd', ['/c', 'start', 'wsl', '--', 'bash', '-c', cmdJoined], { detached: true, stdio: 'ignore', shell: true }).unref();
-              } else {
-                spawn('cmd', ['/c', 'start', 'wsl', '--', 'bash', '-c', `${cmdJoined}; read -p 'Press Enter...'`], { detached: true, stdio: 'ignore', shell: true }).unref();
-              }
             } else {
               // CMD (default)
               spawn('cmd', ['/c', 'start', 'cmd', cmdSwitch, cmdJoined], { detached: true, stdio: 'ignore', shell: true }).unref();
@@ -167,7 +160,8 @@ export function activate(context: vscode.ExtensionContext) {
         // Internal VS Code terminal (uses PowerShell on Windows by default)
         const terminal = vscode.window.createTerminal({
           name: cmdData.name,
-          location: vscode.TerminalLocation.Editor
+          location: vscode.TerminalLocation.Editor,
+          env: cmdData.env // Pass environment variables
         });
 
         terminal.show();
@@ -278,6 +272,39 @@ export function activate(context: vscode.ExtensionContext) {
     listProvider.duplicateCommand(item);
   });
 
+  // Search commands
+  const searchCommand = vscode.commands.registerCommand('cmdrun.search', async () => {
+    const currentFilter = listProvider.getSearchFilter();
+    const filter = await vscode.window.showInputBox({
+      prompt: 'Filter commands by name, group, command, URL or program',
+      placeHolder: 'Enter filter text...',
+      value: currentFilter
+    });
+    if (filter !== undefined) {
+      listProvider.setSearchFilter(filter);
+      // Update description and context
+      treeView.description = filter ? `🔍 "${filter}"` : '';
+      vscode.commands.executeCommand('setContext', 'cmdrun.hasSearchFilter', !!filter);
+    }
+  });
+
+  // Clear search
+  const clearSearchCommand = vscode.commands.registerCommand('cmdrun.clearSearch', () => {
+    listProvider.clearSearch();
+    treeView.description = '';
+    vscode.commands.executeCommand('setContext', 'cmdrun.hasSearchFilter', false);
+  });
+
+  // Export config
+  const exportCommand = vscode.commands.registerCommand('cmdrun.export', () => {
+    listProvider.exportConfig();
+  });
+
+  // Import config
+  const importCommand = vscode.commands.registerCommand('cmdrun.import', () => {
+    listProvider.importConfig();
+  });
+
   context.subscriptions.push(
     addCommand,
     editCommand,
@@ -290,6 +317,10 @@ export function activate(context: vscode.ExtensionContext) {
     collapseGroupCommand,
     addToGroupCommand,
     duplicateCommand,
+    searchCommand,
+    clearSearchCommand,
+    exportCommand,
+    importCommand,
     { dispose: () => listProvider.dispose() }
   );
 }

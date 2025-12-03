@@ -19,7 +19,7 @@ Quick launcher for terminal commands, URLs, and external programs from the sideb
 ## Features
 
 ### 🖥️ Terminal Commands
-Run commands in VS Code terminal or external terminals (CMD, PowerShell, Git Bash, WSL, Windows Terminal).
+Run commands in VS Code terminal or external terminals (CMD, PowerShell, Git Bash, Windows Terminal).
 
 ```json
 {

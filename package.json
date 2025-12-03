@@ -2,7 +2,7 @@
   "name": "cmdrun",
   "displayName": "CMDRun",
   "description": "Quick command launcher with sidebar panel. Run terminal commands, open URLs, launch external programs. Supports hierarchical groups, drag & drop reordering, and auto-close terminal option.",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "publisher": "YaroslavHorokhov",
   "author": {
     "name": "Yaroslav Horokhov"
@@ -105,6 +105,26 @@
         "command": "cmdrun.duplicate",
         "title": "Duplicate Command",
         "icon": "$(copy)"
+      },
+      {
+        "command": "cmdrun.search",
+        "title": "Search Commands",
+        "icon": "$(search)"
+      },
+      {
+        "command": "cmdrun.clearSearch",
+        "title": "Clear Search",
+        "icon": "$(close)"
+      },
+      {
+        "command": "cmdrun.export",
+        "title": "Export Config",
+        "icon": "$(export)"
+      },
+      {
+        "command": "cmdrun.import",
+        "title": "Import Config",
+        "icon": "$(import)"
       }
     ],
     "menus": {
@@ -133,6 +153,26 @@
           "command": "cmdrun.expandAll",
           "when": "view == cmdrunList",
           "group": "navigation@5"
+        },
+        {
+          "command": "cmdrun.search",
+          "when": "view == cmdrunList",
+          "group": "navigation@6"
+        },
+        {
+          "command": "cmdrun.clearSearch",
+          "when": "view == cmdrunList && cmdrun.hasSearchFilter",
+          "group": "navigation@7"
+        },
+        {
+          "command": "cmdrun.export",
+          "when": "view == cmdrunList",
+          "group": "2_config@1"
+        },
+        {
+          "command": "cmdrun.import",
+          "when": "view == cmdrunList",
+          "group": "2_config@2"
         }
       ],
       "view/item/context": [

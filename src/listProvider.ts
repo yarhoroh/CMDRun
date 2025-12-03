@@ -26,6 +26,7 @@ export interface CommandData {
   externalTerminal?: boolean; // run in external terminal window
   terminalProfile?: string; // name of terminal profile to use (e.g., "PowerShell", "Command Prompt", "Git Bash")
   runAsAdmin?: boolean; // run as administrator (Windows only)
+  env?: { [key: string]: string }; // environment variables
   urls?: UrlItem[];
   url?: string; // deprecated, for backward compatibility
   programs?: ProgramItem[]; // array of programs to launch in parallel
@@ -73,11 +74,6 @@ export function getTerminalProfiles(): TerminalProfile[] {
         profiles.push({ name: 'Git Bash', path: p, args: ['-c'] });
         break;
       }
-    }
-
-    // WSL (Windows Subsystem for Linux)
-    if (fs.existsSync('C:\\Windows\\System32\\wsl.exe')) {
-      profiles.push({ name: 'WSL', path: 'wsl.exe', args: ['--', 'bash', '-c'] });
     }
 
     // Windows Terminal (if installed, use 'wt' command)
@@ -191,6 +187,7 @@ export class ListProvider implements vscode.TreeDataProvider<TreeItem>, vscode.T
   private fileWatcher: vscode.FileSystemWatcher | undefined;
   private expandedGroups: Set<string> = new Set();
   private context: vscode.ExtensionContext | undefined;
+  private searchFilter: string = '';
 
   constructor() {
     this.loadCommands();
@@ -221,6 +218,51 @@ export class ListProvider implements vscode.TreeDataProvider<TreeItem>, vscode.T
 
   isGroupExpanded(groupPath: string): boolean {
     return this.expandedGroups.has(groupPath);
+  }
+
+  // Search filter methods
+  setSearchFilter(filter: string): void {
+    this.searchFilter = filter.toLowerCase().trim();
+    this.refresh();
+  }
+
+  getSearchFilter(): string {
+    return this.searchFilter;
+  }
+
+  clearSearch(): void {
+    this.searchFilter = '';
+    this.refresh();
+  }
+
+  // Check if command matches search filter
+  private matchesSearch(cmd: CommandData): boolean {
+    if (!this.searchFilter) {
+      return true;
+    }
+    // Search in name
+    if (cmd.name.toLowerCase().includes(this.searchFilter)) {
+      return true;
+    }
+    // Search in group
+    if (cmd.group && cmd.group.toLowerCase().includes(this.searchFilter)) {
+      return true;
+    }
+    // Search in commands
+    if (cmd.commands?.some(c => c.toLowerCase().includes(this.searchFilter))) {
+      return true;
+    }
+    // Search in URLs
+    const urls = cmd.urls || (cmd.url ? [{ url: cmd.url }] : []);
+    if (urls.some(u => u.url.toLowerCase().includes(this.searchFilter))) {
+      return true;
+    }
+    // Search in programs
+    const programs = cmd.programs || (cmd.program ? [{ path: cmd.program }] : []);
+    if (programs.some(p => p.path.toLowerCase().includes(this.searchFilter))) {
+      return true;
+    }
+    return false;
   }
 
   // Drag: store the dragged item (commands or groups)
@@ -480,8 +522,9 @@ export class ListProvider implements vscode.TreeDataProvider<TreeItem>, vscode.T
   }
 
   // Count commands in a group (including all subgroups)
-  private getGroupCommandCount(groupPath: string): number {
-    return this.commands.filter(c =>
+  private getGroupCommandCount(groupPath: string, commandsList?: CommandData[]): number {
+    const cmds = commandsList || this.commands;
+    return cmds.filter(c =>
       c.group === groupPath || (c.group && c.group.startsWith(groupPath + '/'))
     ).length;
   }
@@ -491,8 +534,13 @@ export class ListProvider implements vscode.TreeDataProvider<TreeItem>, vscode.T
     const topLevelGroups: string[] = [];
     const seenGroups = new Set<string>();
 
-    // Collect top-level groups in order of first appearance
-    for (const cmd of this.commands) {
+    // Get filtered commands
+    const filteredCommands = this.searchFilter
+      ? this.commands.filter(cmd => this.matchesSearch(cmd))
+      : this.commands;
+
+    // Collect top-level groups in order of first appearance (only from filtered commands)
+    for (const cmd of filteredCommands) {
       if (cmd.group) {
         const topGroup = cmd.group.split('/')[0];
         if (!seenGroups.has(topGroup)) {
@@ -504,13 +552,15 @@ export class ListProvider implements vscode.TreeDataProvider<TreeItem>, vscode.T
 
     // Add group items (in order of first appearance, not alphabetically)
     for (const group of topLevelGroups) {
-      const count = this.getGroupCommandCount(group);
-      items.push(new GroupItem(group, this.isGroupExpanded(group), count));
+      const count = this.getGroupCommandCount(group, filteredCommands);
+      // When searching, expand all groups to show results
+      const isExpanded = this.searchFilter ? true : this.isGroupExpanded(group);
+      items.push(new GroupItem(group, isExpanded, count));
     }
 
     // Add ungrouped commands (in original order)
     this.commands.forEach((cmd, index) => {
-      if (!cmd.group) {
+      if (!cmd.group && this.matchesSearch(cmd)) {
         items.push(new CommandItem(cmd, index));
       }
     });
@@ -524,9 +574,19 @@ export class ListProvider implements vscode.TreeDataProvider<TreeItem>, vscode.T
     const seenSubGroups = new Set<string>();
     const prefix = groupPath + '/';
 
+    // Get filtered commands for counting
+    const filteredCommands = this.searchFilter
+      ? this.commands.filter(cmd => this.matchesSearch(cmd))
+      : this.commands;
+
     // Find subgroups and commands in this group (in order of appearance)
     this.commands.forEach((cmd, index) => {
       if (!cmd.group) {
+        return;
+      }
+
+      // Skip if doesn't match search filter
+      if (this.searchFilter && !this.matchesSearch(cmd)) {
         return;
       }
 
@@ -548,8 +608,10 @@ export class ListProvider implements vscode.TreeDataProvider<TreeItem>, vscode.T
     // Add subgroup items first (in order of first appearance)
     const subGroupItems: TreeItem[] = [];
     for (const subGroup of subGroups) {
-      const count = this.getGroupCommandCount(subGroup);
-      subGroupItems.push(new GroupItem(subGroup, this.isGroupExpanded(subGroup), count));
+      const count = this.getGroupCommandCount(subGroup, filteredCommands);
+      // When searching, expand all groups to show results
+      const isExpanded = this.searchFilter ? true : this.isGroupExpanded(subGroup);
+      subGroupItems.push(new GroupItem(subGroup, isExpanded, count));
     }
 
     return [...subGroupItems, ...items];
@@ -747,6 +809,100 @@ export class ListProvider implements vscode.TreeDataProvider<TreeItem>, vscode.T
 
   getCommandData(item: CommandItem): CommandData | undefined {
     return this.commands[item.index];
+  }
+
+  // Export config to file
+  async exportConfig(): Promise<void> {
+    if (this.commands.length === 0) {
+      vscode.window.showWarningMessage('No commands to export');
+      return;
+    }
+
+    const uri = await vscode.window.showSaveDialog({
+      defaultUri: vscode.Uri.file('commands.cmdrun.json'),
+      filters: {
+        'CMDRun Config': ['cmdrun.json', 'json']
+      },
+      saveLabel: 'Export'
+    });
+
+    if (!uri) {
+      return;
+    }
+
+    try {
+      const config: ConfigFile = { commands: this.commands };
+      fs.writeFileSync(uri.fsPath, JSON.stringify(config, null, 2), 'utf-8');
+      vscode.window.showInformationMessage(`Exported ${this.commands.length} commands to ${path.basename(uri.fsPath)}`);
+    } catch (error) {
+      vscode.window.showErrorMessage(`Failed to export config: ${error}`);
+    }
+  }
+
+  // Import config from file
+  async importConfig(): Promise<void> {
+    const uris = await vscode.window.showOpenDialog({
+      canSelectMany: false,
+      filters: {
+        'CMDRun Config': ['cmdrun.json', 'json']
+      },
+      openLabel: 'Import'
+    });
+
+    if (!uris || uris.length === 0) {
+      return;
+    }
+
+    try {
+      const content = fs.readFileSync(uris[0].fsPath, 'utf-8');
+      const imported: ConfigFile = JSON.parse(content);
+
+      if (!imported.commands || !Array.isArray(imported.commands)) {
+        vscode.window.showErrorMessage('Invalid config file: missing commands array');
+        return;
+      }
+
+      // Ask user how to import
+      const action = await vscode.window.showQuickPick(
+        [
+          { label: 'Merge', description: 'Add imported commands to existing ones' },
+          { label: 'Replace', description: 'Replace all existing commands' }
+        ],
+        { placeHolder: `Import ${imported.commands.length} commands` }
+      );
+
+      if (!action) {
+        return;
+      }
+
+      if (action.label === 'Replace') {
+        this.commands = imported.commands;
+      } else {
+        // Merge: add commands that don't exist (by name + group)
+        const existingKeys = new Set(
+          this.commands.map(c => `${c.group || ''}::${c.name}`)
+        );
+        let added = 0;
+        for (const cmd of imported.commands) {
+          const key = `${cmd.group || ''}::${cmd.name}`;
+          if (!existingKeys.has(key)) {
+            this.commands.push(cmd);
+            existingKeys.add(key);
+            added++;
+          }
+        }
+        vscode.window.showInformationMessage(`Added ${added} new commands (${imported.commands.length - added} duplicates skipped)`);
+      }
+
+      this.saveCommands();
+      this.refresh();
+
+      if (action.label === 'Replace') {
+        vscode.window.showInformationMessage(`Replaced with ${imported.commands.length} commands`);
+      }
+    } catch (error) {
+      vscode.window.showErrorMessage(`Failed to import config: ${error}`);
+    }
   }
 
   dispose(): void {

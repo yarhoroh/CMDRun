@@ -111,10 +111,15 @@ export class CommandFormPanel {
     // Support both old program/args and new programs array
     const programs: ProgramItem[] = existingData?.programs ||
       (existingData?.program ? [{ path: existingData.program, args: Array.isArray(existingData.args) ? existingData.args.join(' ') : existingData.args }] : []);
+    // Environment variables
+    const envVars: { key: string; value: string }[] = existingData?.env
+      ? Object.entries(existingData.env).map(([key, value]) => ({ key, value }))
+      : [];
 
     const commandsJson = JSON.stringify(commands);
     const urlsJson = JSON.stringify(urls);
     const programsJson = JSON.stringify(programs);
+    const envVarsJson = JSON.stringify(envVars);
     const terminalProfilesJson = JSON.stringify(terminalProfiles);
 
     return `<!DOCTYPE html>
@@ -289,6 +294,29 @@ export class CommandFormPanel {
     }
     .program-item .btn-icon:hover { background: var(--vscode-button-secondaryHoverBackground); }
     .program-item .btn-icon.remove { color: var(--vscode-errorForeground); }
+    /* Env var item */
+    .env-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .env-item input[type="text"].env-key { flex: 1; }
+    .env-item input[type="text"].env-value { flex: 2; }
+    .env-item .btn-icon {
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--vscode-button-secondaryBackground);
+      color: var(--vscode-button-secondaryForeground);
+      font-size: 16px;
+      font-weight: bold;
+    }
+    .env-item .btn-icon:hover { background: var(--vscode-button-secondaryHoverBackground); }
+    .env-item .btn-icon.remove { color: var(--vscode-errorForeground); }
     /* Custom autocomplete dropdown */
     .autocomplete-wrapper {
       position: relative;
@@ -343,6 +371,11 @@ export class CommandFormPanel {
 
     <div class="form-group">
       <label>Terminal Commands</label>
+      <div style="margin-top: 12px;margin-bottom: 18px;">
+        <label style="font-size: 12px; color: var(--vscode-descriptionForeground);">Environment Variables (Optional)</label>
+        <div id="envContainer" class="array-container" style="margin-top: 4px;"></div>
+        <button type="button" class="btn-add" onclick="addEnvVar()">+ Add Variable</button>
+      </div>
       <div id="terminalProfileRow" style="margin-bottom: 8px; display: flex; align-items: center; gap: 8px;">
         <label for="terminalProfile" style="font-weight: normal; white-space: nowrap;">Terminal:</label>
         <select id="terminalProfile" style="flex: 1; padding: 6px 8px; border: 1px solid var(--vscode-input-border); background: var(--vscode-input-background); color: var(--vscode-input-foreground); border-radius: 4px;">
@@ -361,7 +394,7 @@ export class CommandFormPanel {
           Run as Admin
         </label>` : ''}
       </div>
-      <div class="hint">Commands will run sequentially in terminal.</div>
+      <div class="hint">Commands will run sequentially in terminal.</div>     
     </div>
 
     <div class="form-group">
@@ -393,6 +426,7 @@ export class CommandFormPanel {
     let commandsData = ${commandsJson};
     let urlsData = ${urlsJson};
     let programsData = ${programsJson};
+    let envVarsData = ${envVarsJson};
     const existingGroups = ${JSON.stringify(this.existingGroups)};
     const terminalProfiles = ${terminalProfilesJson};
     const savedTerminalProfile = "${this._escapeHtml(terminalProfile)}";
@@ -607,6 +641,57 @@ export class CommandFormPanel {
       renderPrograms();
     }
 
+    function renderEnvVars() {
+      const container = document.getElementById('envContainer');
+      container.innerHTML = '';
+      envVarsData.forEach((item, idx) => {
+        const div = document.createElement('div');
+        div.className = 'env-item';
+
+        const keyInput = document.createElement('input');
+        keyInput.type = 'text';
+        keyInput.className = 'env-key';
+        keyInput.placeholder = 'KEY';
+        keyInput.value = item.key || '';
+        keyInput.addEventListener('change', () => updateEnvVar(idx, 'key', keyInput.value));
+
+        const valueInput = document.createElement('input');
+        valueInput.type = 'text';
+        valueInput.className = 'env-value';
+        valueInput.placeholder = 'value';
+        valueInput.value = item.value || '';
+        valueInput.addEventListener('change', () => updateEnvVar(idx, 'value', valueInput.value));
+
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'btn-icon remove';
+        removeBtn.textContent = '×';
+        removeBtn.addEventListener('click', () => removeEnvVar(idx));
+
+        div.appendChild(keyInput);
+        div.appendChild(valueInput);
+        div.appendChild(removeBtn);
+        container.appendChild(div);
+      });
+    }
+
+    function addEnvVar() {
+      envVarsData.push({ key: '', value: '' });
+      renderEnvVars();
+      // Focus the new key input
+      const inputs = document.querySelectorAll('#envContainer input.env-key');
+      if (inputs.length) inputs[inputs.length - 1].focus();
+    }
+
+    function updateEnvVar(idx, field, value) {
+      envVarsData[idx][field] = value;
+    }
+
+    function removeEnvVar(idx) {
+      envVarsData.splice(idx, 1);
+      renderEnvVars();
+    }
+
     function escapeHtml(text) {
       const div = document.createElement('div');
       div.textContent = text || '';
@@ -616,6 +701,7 @@ export class CommandFormPanel {
     // Initial render
     renderCommands();
     renderUrls();
+    renderEnvVars();
     renderPrograms();
 
     document.getElementById('commandForm').addEventListener('submit', (e) => {
@@ -646,6 +732,15 @@ export class CommandFormPanel {
           ...(argsVal ? { args: argsVal } : {})
         };
       });
+      // Filter and convert env vars to object
+      const filteredEnv = {};
+      envVarsData.forEach(item => {
+        const key = item.key?.trim();
+        const value = item.value?.trim();
+        if (key) {
+          filteredEnv[key] = value || '';
+        }
+      });
 
       const data = { name };
       if (group) data.group = group;
@@ -654,6 +749,7 @@ export class CommandFormPanel {
       if (externalTerminal) data.externalTerminal = true;
       if (terminalProfile) data.terminalProfile = terminalProfile;
       if (runAsAdmin) data.runAsAdmin = true;
+      if (Object.keys(filteredEnv).length) data.env = filteredEnv;
       if (filteredUrls.length) data.urls = filteredUrls;
       if (filteredPrograms.length) data.programs = filteredPrograms;
 
