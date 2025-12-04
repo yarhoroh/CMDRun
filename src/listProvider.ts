@@ -232,6 +232,8 @@ export class ListProvider implements vscode.TreeDataProvider<TreeItem>, vscode.T
       this.expandedGroups.delete(groupPath);
     }
     this.saveExpandedState();
+    // Refresh tree to update folder icon
+    this._onDidChangeTreeData.fire();
   }
 
   isGroupExpanded(groupPath: string): boolean {
@@ -587,8 +589,7 @@ export class ListProvider implements vscode.TreeDataProvider<TreeItem>, vscode.T
   }
 
   private getGroupChildren(groupPath: string): TreeItem[] {
-    const items: TreeItem[] = [];
-    const subGroups: string[] = [];
+    const result: TreeItem[] = [];
     const seenSubGroups = new Set<string>();
     const prefix = groupPath + '/';
 
@@ -598,6 +599,7 @@ export class ListProvider implements vscode.TreeDataProvider<TreeItem>, vscode.T
       : this.commands;
 
     // Find subgroups and commands in this group (in order of appearance)
+    // Add items in the order they appear, treating subgroups and commands equally
     this.commands.forEach((cmd, index) => {
       if (!cmd.group) {
         return;
@@ -609,30 +611,24 @@ export class ListProvider implements vscode.TreeDataProvider<TreeItem>, vscode.T
       }
 
       if (cmd.group === groupPath) {
-        // Command directly in this group
-        items.push(new CommandItem(cmd, index));
+        // Command directly in this group - add it
+        result.push(new CommandItem(cmd, index));
       } else if (cmd.group.startsWith(prefix)) {
-        // Command in a subgroup - track subgroup in order of first appearance
+        // Command in a subgroup - add subgroup if not seen yet
         const remaining = cmd.group.slice(prefix.length);
         const nextGroup = remaining.split('/')[0];
         const fullSubGroup = groupPath + '/' + nextGroup;
         if (!seenSubGroups.has(fullSubGroup)) {
           seenSubGroups.add(fullSubGroup);
-          subGroups.push(fullSubGroup);
+          const count = this.getGroupCommandCount(fullSubGroup, filteredCommands);
+          // When searching, expand all groups to show results
+          const isExpanded = this.searchFilter ? true : this.isGroupExpanded(fullSubGroup);
+          result.push(new GroupItem(fullSubGroup, isExpanded, count));
         }
       }
     });
 
-    // Add subgroup items first (in order of first appearance)
-    const subGroupItems: TreeItem[] = [];
-    for (const subGroup of subGroups) {
-      const count = this.getGroupCommandCount(subGroup, filteredCommands);
-      // When searching, expand all groups to show results
-      const isExpanded = this.searchFilter ? true : this.isGroupExpanded(subGroup);
-      subGroupItems.push(new GroupItem(subGroup, isExpanded, count));
-    }
-
-    return [...subGroupItems, ...items];
+    return result;
   }
 
   refresh(): void {
