@@ -1,7 +1,10 @@
 import * as vscode from 'vscode';
-import { ListProvider, CommandItem, GroupItem, UrlItem, getTerminalProfiles } from './listProvider';
+import { ListProvider, CommandItem, GroupItem, UrlItem, getTerminalProfiles, loadTerminalProfiles } from './listProvider';
 
-export function activate(context: vscode.ExtensionContext) {
+export async function activate(context: vscode.ExtensionContext) {
+  // Load terminal profiles at startup (async, uses VS Code API)
+  loadTerminalProfiles();
+
   const listProvider = new ListProvider();
   listProvider.setExtensionUri(context.extensionUri);
   listProvider.setContext(context);

@@ -37,106 +37,81 @@ export interface CommandData {
 // Cache for terminal profiles
 let cachedProfiles: TerminalProfile[] | null = null;
 
-// Find executable on Windows using 'where' command (fast)
-function findExeOnWindows(execs: string[]): string | null {
-  const { execSync } = require('child_process');
-  for (const exe of execs) {
-    try {
-      const result = execSync(`where ${exe}`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'], timeout: 1000 });
-      const lines = result.split('\n').map((l: string) => l.trim()).filter((l: string) => l);
-      // For bash.exe, prefer Git path over system32 (WSL)
-      if (exe === 'bash.exe' || exe === 'sh.exe') {
-        const gitPath = lines.find((l: string) => l.toLowerCase().includes('git'));
-        if (gitPath) return gitPath;
-      }
-      if (lines[0]) return lines[0];
-    } catch { /* not found */ }
-  }
-  return null;
-}
-
-// Find executable in PATH on Linux/macOS
-function findExeInPath(exe: string): string | null {
-  const { execSync } = require('child_process');
-  try {
-    const result = execSync(`which ${exe}`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'], timeout: 500 });
-    return result.trim() || null;
-  } catch { return null; }
-}
-
-// Get available terminal profiles - auto-detect + VS Code settings
+// Get terminal profiles synchronously (from cache)
 export function getTerminalProfiles(): TerminalProfile[] {
-  // Return cached if available
-  if (cachedProfiles) return cachedProfiles;
+  return cachedProfiles || [];
+}
 
-  const profiles: TerminalProfile[] = [];
-  const config = vscode.workspace.getConfiguration('terminal.integrated');
+// Load terminal profiles async - combines VS Code API + settings + system detection
+export async function loadTerminalProfiles(): Promise<TerminalProfile[]> {
   const fs = require('fs');
-  const path = require('path');
+  const result: TerminalProfile[] = [];
+  const usedNames = new Set<string>();
 
-  // Helper to add profile if not already exists (by name or path)
+  // Helper to add profile avoiding duplicates
   const addProfile = (name: string, profilePath: string, args: string[] = []) => {
-    if (typeof profilePath !== 'string' || !profilePath) return;
-    // Skip WSL profiles
     const lowerName = name.toLowerCase();
-    const lowerPath = profilePath.toLowerCase();
+    // Skip WSL profiles
     if (lowerName.includes('wsl') || lowerName.includes('ubuntu') || lowerName.includes('debian')) return;
-    if (lowerPath.includes('system32\\bash') || lowerPath.includes('system32\\wsl')) return;
-    // Skip duplicates by name or path
-    const normPath = profilePath.toLowerCase().replace(/\\/g, '/');
-    if (profiles.find(p => p.name === name || p.path.toLowerCase().replace(/\\/g, '/') === normPath)) return;
-    profiles.push({ name, path: profilePath, args });
+    // Skip duplicates
+    if (usedNames.has(lowerName)) return;
+    usedNames.add(lowerName);
+    result.push({ name, path: profilePath, args });
   };
 
-  // 1. Get profiles from VS Code settings first
+  try {
+    // 1) VS Code API listTerminalProfiles()
+    const listed = await (vscode.window as any).listTerminalProfiles();
+    for (const p of listed) {
+      addProfile(p.profileName || 'Unknown', p.path || p.executable || '', p.args || []);
+    }
+  } catch { /* API may not be available */ }
+
+  // 2) User settings profiles
+  const settings = vscode.workspace.getConfiguration('terminal.integrated');
   const platformKey = process.platform === 'win32' ? 'windows'
     : process.platform === 'darwin' ? 'osx' : 'linux';
-  const platformProfiles = config.get<Record<string, any>>(`profiles.${platformKey}`) || {};
+  const settingsProfiles = settings.get<Record<string, any>>(`profiles.${platformKey}`) || {};
 
-  for (const [name, profile] of Object.entries(platformProfiles)) {
-    if (profile && typeof profile === 'object' && profile.path) {
-      addProfile(name, profile.path, profile.args || []);
+  for (const [name, p] of Object.entries(settingsProfiles)) {
+    if (p && typeof p === 'object' && p.path) {
+      addProfile(name, p.path, p.args || []);
     }
   }
 
-  // 2. Auto-detect shells
+  // 3) System detection (fallback)
   if (process.platform === 'win32') {
-    const candidates = [
-      { name: 'PowerShell 7', execs: ['pwsh.exe'] },
-      { name: 'PowerShell', execs: ['powershell.exe'] },
-      { name: 'Command Prompt', execs: ['cmd.exe'] },
-      { name: 'Git Bash', execs: ['bash.exe', 'sh.exe'] },
+    // PowerShell 7
+    const pwsh7 = 'C:\\Program Files\\PowerShell\\7\\pwsh.exe';
+    if (fs.existsSync(pwsh7)) addProfile('PowerShell 7', pwsh7, []);
+
+    // PowerShell
+    const ps = 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
+    if (fs.existsSync(ps)) addProfile('PowerShell', ps, []);
+
+    // Command Prompt
+    const cmd = 'C:\\Windows\\System32\\cmd.exe';
+    if (fs.existsSync(cmd)) addProfile('Command Prompt', cmd, []);
+
+    // Git Bash
+    const gitPaths = [
+      'C:\\Program Files\\Git\\bin\\bash.exe',
+      'C:\\Program Files (x86)\\Git\\bin\\bash.exe'
     ];
-    for (const c of candidates) {
-      const found = findExeOnWindows(c.execs);
-      if (found) addProfile(c.name, found, []);
+    for (const gp of gitPaths) {
+      if (fs.existsSync(gp)) {
+        addProfile('Git Bash', gp, ['--login', '-i']);
+        break;
+      }
     }
   } else {
-    // macOS / Linux - read /etc/shells
-    try {
-      const shells = fs.readFileSync('/etc/shells', 'utf8')
-        .split(/\r?\n/)
-        .map((l: string) => l.trim())
-        .filter((l: string) => l && !l.startsWith('#'));
-      for (const s of shells) {
-        if (fs.existsSync(s)) {
-          const name = path.basename(s);
-          addProfile(name, s, []);
-        }
-      }
-    } catch {
-      // Fallback
-      const fallbacks = ['bash', 'zsh', 'fish', 'sh'];
-      for (const exe of fallbacks) {
-        const p = findExeInPath(exe);
-        if (p) addProfile(exe, p, []);
-      }
-    }
+    // Linux/macOS fallback
+    if (fs.existsSync('/bin/bash')) addProfile('bash', '/bin/bash', []);
+    if (fs.existsSync('/bin/zsh')) addProfile('zsh', '/bin/zsh', []);
   }
 
-  // Cache result
-  cachedProfiles = profiles;
-  return profiles;
+  cachedProfiles = result;
+  return result;
 }
 
 // Clear cache (call on refresh)
