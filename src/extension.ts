@@ -145,21 +145,26 @@ export async function activate(context: vscode.ExtensionContext) {
             } else if (isPowerShell) {
               // PowerShell - use semicolon separator with env
               if (cmdData.autoClose) {
-                spawn('cmd', ['/c', 'start', termPath, '-Command', psWithEnv], { detached: true, stdio: 'ignore', shell: true }).unref();
+                // Direct spawn - runs and closes
+                spawn(termPath, ['-Command', psWithEnv], { detached: true, stdio: 'ignore', shell: true }).unref();
               } else {
-                spawn('cmd', ['/c', 'start', termPath, '-NoExit', '-Command', psWithEnv], { detached: true, stdio: 'ignore', shell: true }).unref();
+                // Direct spawn with -NoExit - keeps window open
+                spawn(termPath, ['-NoExit', '-Command', psWithEnv], { detached: true, stdio: 'ignore', shell: true }).unref();
               }
             } else if (isBash) {
               // Git Bash with env exports
               if (cmdData.autoClose) {
-                spawn('cmd', ['/c', 'start', termPath, '-c', bashWithEnv], { detached: true, stdio: 'ignore', shell: true }).unref();
+                // Direct spawn - runs and closes
+                spawn(termPath, ['-c', bashWithEnv], { detached: true, stdio: 'ignore', shell: true }).unref();
               } else {
-                spawn('cmd', ['/c', 'start', termPath, '-c', `${bashWithEnv}; read -p 'Press Enter to close...'`], { detached: true, stdio: 'ignore', shell: true }).unref();
+                // Direct spawn with read prompt to keep window open
+                spawn(termPath, ['-c', `${bashWithEnv}; read -p 'Press Enter to close...'`], { detached: true, stdio: 'ignore', shell: true }).unref();
               }
             } else {
-              // CMD (default) with env - start new cmd window with /v:on for delayed expansion
-              const { exec } = require('child_process');
-              exec(`start cmd /v:on ${cmdSwitch} "${cmdWithEnv}"`);
+              // CMD (default) with env - /v:on for delayed expansion
+              // Use start to open new CMD window with commands
+              const cmdSwitch = cmdData.autoClose ? '/c' : '/k';
+              exec(`start "" cmd /v:on ${cmdSwitch} "${cmdWithEnv}"`);
             }
           }
         } else if (process.platform === 'darwin') {
@@ -215,14 +220,8 @@ export async function activate(context: vscode.ExtensionContext) {
         const internalCommands = process.platform === 'win32' ? psJoined : bashJoined;
 
         if (cmdData.autoClose) {
-          // Platform-specific autoClose handling
-          if (process.platform === 'win32') {
-            // PowerShell: try/finally to exit even on Ctrl+C
-            terminal.sendText(`try { ${psJoined} } finally { exit }`);
-          } else {
-            // Bash (Linux/Mac): trap for Ctrl+C, then run commands and exit
-            terminal.sendText(`trap 'exit' INT; ${bashJoined}; exit`);
-          }
+          // Run commands then exit
+          terminal.sendText(`${internalCommands}; exit`);
         } else {
           terminal.sendText(internalCommands);
         }
