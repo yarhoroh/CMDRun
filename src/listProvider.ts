@@ -5,6 +5,7 @@ import * as path from 'path';
 export interface UrlItem {
   url: string;
   external?: boolean; // true = open in system default browser
+  webview?: boolean;  // true = open in separate Webview panel (allows multiple tabs)
 }
 
 export interface ProgramItem {

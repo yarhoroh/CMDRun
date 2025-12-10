@@ -302,6 +302,28 @@ export async function activate(context: vscode.ExtensionContext) {
         } else {
           exec(`xdg-open "${processedUrl}"`);
         }
+      } else if (urlItem.webview === true) {
+        // Open in separate Webview panel (allows multiple tabs)
+        const urlObj = new URL(processedUrl);
+        const title = urlObj.hostname + (urlObj.port ? ':' + urlObj.port : '') + urlObj.pathname;
+        const panel = vscode.window.createWebviewPanel(
+          'cmdrunBrowser',
+          title,
+          vscode.ViewColumn.Beside,
+          {
+            enableScripts: true,
+            retainContextWhenHidden: true
+          }
+        );
+        panel.webview.html = `
+          <!DOCTYPE html>
+          <html>
+            <head><meta charset="UTF-8"></head>
+            <body style="margin:0;padding:0;overflow:hidden;">
+              <iframe src="${processedUrl}" style="width:100%;height:100vh;border:none;"></iframe>
+            </body>
+          </html>
+        `;
       } else {
         // Open in Simple Browser inside VS Code
         await vscode.commands.executeCommand('simpleBrowser.show', processedUrl);

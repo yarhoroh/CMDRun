@@ -18,8 +18,8 @@ Quick launcher for terminal commands, URLs, and external programs from the sideb
 
 ## Features
 
-### 🆕 v0.0.9: Input Variables
-Prompt for user input at runtime using `${input:Label}` syntax. Works in commands, URLs, and program arguments.
+- 🆕 **v0.0.10**: Multi-tab Webview — open multiple URLs in separate VS Code tabs with `webview: true`
+- 🆕 **v0.0.9**: Input Variables — prompt for user input at runtime using `${input:Label}` syntax
 
 ### 🖥️ Terminal Commands
 Run commands in VS Code terminal or external terminals (CMD, PowerShell, Git Bash, Windows Terminal).
@@ -38,7 +38,7 @@ Run commands in VS Code terminal or external terminals (CMD, PowerShell, Git Bas
 - `runAsAdmin` - run with elevated privileges (Windows)
 
 ### 🌐 URLs
-Open URLs in VS Code Simple Browser or external browser.
+Open URLs in VS Code Simple Browser, external browser, or multi-tab Webview panels.
 
 ```json
 {
@@ -46,10 +46,17 @@ Open URLs in VS Code Simple Browser or external browser.
   "commands": ["npm run dev"],
   "urls": [
     { "url": "http://localhost:3000" },
-    { "url": "http://localhost:3000/api", "external": true }
+    { "url": "http://localhost:3000/api", "external": true },
+    { "url": "http://localhost:3000/docs", "webview": true }
   ]
 }
 ```
+
+**Options:**
+- `external: true` - open in system default browser
+- `webview: true` - open in separate VS Code tab (allows multiple tabs)
+
+> **Note:** VS Code's Simple Browser supports only one tab at a time (VS Code limitation). Multi-tab (webview) uses iframe and works best with localhost URLs — external sites may block embedding via X-Frame-Options.
 
 ### ⚙️ External Programs
 Launch any application with arguments.

@@ -401,7 +401,7 @@ export class CommandFormPanel {
       <label>URLs</label>
       <div id="urlsContainer" class="array-container"></div>
       <button type="button" class="btn-add" onclick="addUrl()">+ Add URL</button>
-      <div class="hint">Opens in Simple Browser (or external browser if checked).</div>
+      <div class="hint">Simple Browser (single tab), External (system browser), Multi-tab (separate VS Code tabs).</div>
     </div>
 
     <div class="section">
@@ -554,20 +554,28 @@ export class CommandFormPanel {
       urlsData.forEach((item, idx) => {
         const div = document.createElement('div');
         div.className = 'url-item';
+        // Determine current mode: 'simple', 'external', or 'webview'
+        const mode = item.external ? 'external' : (item.webview ? 'webview' : 'simple');
         div.innerHTML = \`
           <input type="text" value="\${escapeHtml(item.url)}" placeholder="https://localhost:5000" onchange="updateUrl(\${idx}, 'url', this.value)">
-          <label class="checkbox-label">
-            <input type="checkbox" \${item.external ? 'checked' : ''} onchange="updateUrl(\${idx}, 'external', this.checked)">
-            External
-          </label>
+          <select onchange="updateUrlMode(\${idx}, this.value)" style="padding: 6px 24px 6px 8px; border: 1px solid var(--vscode-input-border); background: var(--vscode-input-background); color: var(--vscode-input-foreground); border-radius: 4px;">
+            <option value="simple" \${mode === 'simple' ? 'selected' : ''}>Simple Browser</option>
+            <option value="external" \${mode === 'external' ? 'selected' : ''}>External</option>
+            <option value="webview" \${mode === 'webview' ? 'selected' : ''}>Multi-tab</option>
+          </select>
           <button type="button" class="btn-icon remove" onclick="removeUrl(\${idx})">×</button>
         \`;
         container.appendChild(div);
       });
     }
 
+    function updateUrlMode(idx, mode) {
+      urlsData[idx].external = (mode === 'external');
+      urlsData[idx].webview = (mode === 'webview');
+    }
+
     function addUrl() {
-      urlsData.push({ url: '', external: false });
+      urlsData.push({ url: '', external: false, webview: false });
       renderUrls();
       // Focus the new input
       const inputs = document.querySelectorAll('#urlsContainer input[type="text"]');
@@ -722,7 +730,8 @@ export class CommandFormPanel {
       const filteredCommands = commandsData.map(c => c.trim()).filter(c => c);
       const filteredUrls = urlsData.filter(u => u.url && u.url.trim()).map(u => ({
         url: u.url.trim(),
-        ...(u.external ? { external: true } : {})
+        ...(u.external ? { external: true } : {}),
+        ...(u.webview ? { webview: true } : {})
       }));
       const filteredPrograms = programsData.filter(p => p.path && p.path.trim()).map(p => {
         // Handle args as string (already converted from array in renderPrograms)
