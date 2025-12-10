@@ -12,7 +12,7 @@ Quick launcher for terminal commands, URLs, and external programs from the sideb
 
 | Command Panel | Edit Command |
 |:-------------:|:------------:|
-| ![List](img/List.png) | ![Edit Command](img/EditCommand.png) |
+| ![List](img/List.png) | ![Edit Command](img/EditCommandV10.png) |
 
 ---
 
