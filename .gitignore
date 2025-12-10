@@ -2,6 +2,7 @@ node_modules/
 out/
 *.vsix
 .vscode/
+.claude/
 reinstall.ps1
 scripts/
 icocmdrun.ico

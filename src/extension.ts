@@ -1,6 +1,45 @@
 import * as vscode from 'vscode';
 import { ListProvider, CommandItem, GroupItem, UrlItem, getTerminalProfiles, loadTerminalProfiles } from './listProvider';
 
+// Process ${input:Label} variables - prompt user for input
+async function processInputVariables(text: string): Promise<string | undefined> {
+  const pattern = /\$\{input:([^}]+)\}/g;
+  const matches = [...text.matchAll(pattern)];
+
+  if (matches.length === 0) {
+    return text;
+  }
+
+  const replacements = new Map<string, string>();
+
+  for (const match of matches) {
+    const fullMatch = match[0];
+    const label = match[1];
+
+    if (replacements.has(fullMatch)) {
+      continue;
+    }
+
+    const value = await vscode.window.showInputBox({
+      prompt: label,
+      placeHolder: label
+    });
+
+    if (value === undefined) {
+      return undefined;
+    }
+
+    replacements.set(fullMatch, value);
+  }
+
+  let result = text;
+  for (const [placeholder, value] of replacements) {
+    result = result.split(placeholder).join(value);
+  }
+
+  return result;
+}
+
 export async function activate(context: vscode.ExtensionContext) {
   // Load terminal profiles at startup (async, uses VS Code API)
   loadTerminalProfiles();
@@ -54,6 +93,16 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // Run terminal commands if present
     if (cmdData.commands?.length) {
+      // Process ${input:Label} variables first
+      const processedCommands: string[] = [];
+      for (const cmd of cmdData.commands) {
+        const processed = await processInputVariables(cmd);
+        if (processed === undefined) {
+          return; // User cancelled
+        }
+        processedCommands.push(processed);
+      }
+
       // Convert {{VAR}} syntax to shell-specific format
       // CMD uses !VAR! with /v:on (delayed expansion) because %VAR% expands before set runs
       const toCmd = (cmd: string) => cmd.replace(/\{\{(\w+)\}\}/g, '!$1!');
@@ -61,9 +110,9 @@ export async function activate(context: vscode.ExtensionContext) {
       const toBash = (cmd: string) => cmd.replace(/\{\{(\w+)\}\}/g, '$$$1');
 
       // Different separators for different shells
-      const cmdJoined = cmdData.commands.map(toCmd).join(' && '); // For CMD
-      const psJoined = cmdData.commands.map(toPs).join('; '); // For PowerShell
-      const bashJoined = cmdData.commands.map(toBash).join(' && '); // For Bash
+      const cmdJoined = processedCommands.map(toCmd).join(' && '); // For CMD
+      const psJoined = processedCommands.map(toPs).join('; '); // For PowerShell
+      const bashJoined = processedCommands.map(toBash).join(' && '); // For Bash
 
       // External terminal with optional admin elevation (Windows only for admin)
       if (cmdData.externalTerminal) {
@@ -232,6 +281,13 @@ export async function activate(context: vscode.ExtensionContext) {
     const urls: UrlItem[] = cmdData.urls || (cmdData.url ? [{ url: cmdData.url }] : []);
     for (let i = 0; i < urls.length; i++) {
       const urlItem = urls[i];
+
+      // Process ${input:Label} in URL
+      const processedUrl = await processInputVariables(urlItem.url);
+      if (processedUrl === undefined) {
+        return; // User cancelled
+      }
+
       // Add delay between URL opens (100ms)
       if (i > 0) {
         await new Promise(resolve => setTimeout(resolve, 100));
@@ -239,17 +295,16 @@ export async function activate(context: vscode.ExtensionContext) {
       if (urlItem.external === true) {
         // Open in system default browser
         const { exec } = require('child_process');
-        const url = urlItem.url;
         if (process.platform === 'win32') {
-          exec(`start "" "${url}"`);
+          exec(`start "" "${processedUrl}"`);
         } else if (process.platform === 'darwin') {
-          exec(`open "${url}"`);
+          exec(`open "${processedUrl}"`);
         } else {
-          exec(`xdg-open "${url}"`);
+          exec(`xdg-open "${processedUrl}"`);
         }
       } else {
         // Open in Simple Browser inside VS Code
-        await vscode.commands.executeCommand('simpleBrowser.show', urlItem.url);
+        await vscode.commands.executeCommand('simpleBrowser.show', processedUrl);
       }
     }
 
@@ -259,18 +314,32 @@ export async function activate(context: vscode.ExtensionContext) {
 
     if (programs.length > 0) {
       const { exec } = require('child_process');
-      // Launch all programs in parallel
+      // Launch all programs sequentially to allow input processing
       for (const prog of programs) {
-        // args can be string or array
-        const argsStr = Array.isArray(prog.args) ? prog.args.join(' ') : (prog.args || '');
+        // Process ${input:Label} in path
+        const processedPath = await processInputVariables(prog.path);
+        if (processedPath === undefined) {
+          return; // User cancelled
+        }
+
+        // Process ${input:Label} in args
+        let argsStr = Array.isArray(prog.args) ? prog.args.join(' ') : (prog.args || '');
+        if (argsStr) {
+          const processedArgs = await processInputVariables(argsStr);
+          if (processedArgs === undefined) {
+            return; // User cancelled
+          }
+          argsStr = processedArgs;
+        }
+
         // Quote path if contains spaces, args passed as-is
-        const quotedPath = prog.path.includes(' ') ? `"${prog.path}"` : prog.path;
+        const quotedPath = processedPath.includes(' ') ? `"${processedPath}"` : processedPath;
         const fullCmd = argsStr ? `${quotedPath} ${argsStr}` : quotedPath;
 
         // Use exec to run command - handles quotes properly
         exec(fullCmd, (error: Error | null) => {
           if (error) {
-            vscode.window.showErrorMessage(`Failed to launch ${prog.path}: ${error.message}`);
+            vscode.window.showErrorMessage(`Failed to launch ${processedPath}: ${error.message}`);
           }
         });
       }

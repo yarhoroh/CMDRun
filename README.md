@@ -18,6 +18,9 @@ Quick launcher for terminal commands, URLs, and external programs from the sideb
 
 ## Features
 
+### 🆕 v0.0.9: Input Variables
+Prompt for user input at runtime using `${input:Label}` syntax. Works in commands, URLs, and program arguments.
+
 ### 🖥️ Terminal Commands
 Run commands in VS Code terminal or external terminals (CMD, PowerShell, Git Bash, Windows Terminal).
 
@@ -99,6 +102,32 @@ Pass environment variables to terminal commands.
   }
 }
 ```
+
+### 📝 Input Variables
+Prompt for user input at runtime with `${input:Label}` syntax.
+
+```json
+{
+  "name": "Git Commit",
+  "commands": ["git add -A", "git commit -m \"${input:Commit message}\""]
+}
+```
+
+```json
+{
+  "name": "Search Google",
+  "urls": [{ "url": "https://google.com/search?q=${input:Search query}", "external": true }]
+}
+```
+
+```json
+{
+  "name": "Open File",
+  "programs": [{ "path": "notepad.exe", "args": "${input:File path}" }]
+}
+```
+
+Works in commands, URLs, and program arguments. Press Escape to cancel.
 
 ### 🔍 Search & Filter
 Filter commands by name, group, command text, URL or program path. Click the search icon in the panel header.
