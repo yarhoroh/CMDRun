@@ -214,6 +214,21 @@ export class CommandFormPanel {
       margin-bottom: 6px;
     }
     .array-item input[type="text"] { flex: 1; }
+    .array-item textarea {
+      flex: 1;
+      padding: 6px 10px;
+      border: 1px solid var(--vscode-input-border);
+      background: var(--vscode-input-background);
+      color: var(--vscode-input-foreground);
+      border-radius: 4px;
+      font-family: inherit;
+      font-size: inherit;
+      line-height: 1.4;
+    }
+    .array-item textarea:focus {
+      outline: 1px solid var(--vscode-focusBorder);
+      border-color: var(--vscode-focusBorder);
+    }
     .array-item .btn-icon {
       width: 28px;
       height: 28px;
@@ -243,6 +258,21 @@ export class CommandFormPanel {
       margin-bottom: 6px;
     }
     .url-item input[type="text"] { flex: 1; }
+    .url-item textarea {
+      flex: 1;
+      padding: 6px 10px;
+      border: 1px solid var(--vscode-input-border);
+      background: var(--vscode-input-background);
+      color: var(--vscode-input-foreground);
+      border-radius: 4px;
+      font-family: inherit;
+      font-size: inherit;
+      line-height: 1.4;
+    }
+    .url-item textarea:focus {
+      outline: 1px solid var(--vscode-focusBorder);
+      border-color: var(--vscode-focusBorder);
+    }
     .url-item label.checkbox-label {
       display: flex;
       align-items: center;
@@ -280,6 +310,32 @@ export class CommandFormPanel {
     }
     .program-item input[type="text"].program-path { flex: 2; }
     .program-item input[type="text"].program-args { flex: 1; }
+    .program-item textarea.program-path {
+      flex: 2;
+      padding: 6px 10px;
+      border: 1px solid var(--vscode-input-border);
+      background: var(--vscode-input-background);
+      color: var(--vscode-input-foreground);
+      border-radius: 4px;
+      font-family: inherit;
+      font-size: inherit;
+      line-height: 1.4;
+    }
+    .program-item textarea.program-args {
+      flex: 1;
+      padding: 6px 10px;
+      border: 1px solid var(--vscode-input-border);
+      background: var(--vscode-input-background);
+      color: var(--vscode-input-foreground);
+      border-radius: 4px;
+      font-family: inherit;
+      font-size: inherit;
+      line-height: 1.4;
+    }
+    .program-item textarea:focus {
+      outline: 1px solid var(--vscode-focusBorder);
+      border-color: var(--vscode-focusBorder);
+    }
     .program-item .btn-icon {
       width: 28px;
       height: 28px;
@@ -524,19 +580,27 @@ export class CommandFormPanel {
         const div = document.createElement('div');
         div.className = 'array-item';
         div.innerHTML = \`
-          <input type="text" value="\${escapeHtml(cmd)}" placeholder="e.g., npm install" onchange="updateCommand(\${idx}, this.value)">
+          <textarea rows="1" placeholder="e.g., npm install" onchange="updateCommand(\${idx}, this.value)" oninput="autoResizeTextarea(this)" style="resize: vertical; min-height: 28px; overflow: hidden;">\${escapeHtml(cmd)}</textarea>
           <button type="button" class="btn-icon remove" onclick="removeCommand(\${idx})">×</button>
         \`;
         container.appendChild(div);
+        // Auto-resize on initial render
+        const textarea = div.querySelector('textarea');
+        autoResizeTextarea(textarea);
       });
+    }
+
+    function autoResizeTextarea(el) {
+      el.style.height = 'auto';
+      el.style.height = Math.max(28, el.scrollHeight) + 'px';
     }
 
     function addCommand() {
       commandsData.push('');
       renderCommands();
-      // Focus the new input
-      const inputs = document.querySelectorAll('#commandsContainer input');
-      if (inputs.length) inputs[inputs.length - 1].focus();
+      // Focus the new textarea
+      const textareas = document.querySelectorAll('#commandsContainer textarea');
+      if (textareas.length) textareas[textareas.length - 1].focus();
     }
 
     function updateCommand(idx, value) {
@@ -557,7 +621,7 @@ export class CommandFormPanel {
         // Determine current mode: 'simple', 'external', or 'webview'
         const mode = item.external ? 'external' : (item.webview ? 'webview' : 'simple');
         div.innerHTML = \`
-          <input type="text" value="\${escapeHtml(item.url)}" placeholder="https://localhost:5000" onchange="updateUrl(\${idx}, 'url', this.value)">
+          <textarea rows="1" placeholder="https://localhost:5000" onchange="updateUrl(\${idx}, 'url', this.value)" oninput="autoResizeTextarea(this)" style="resize: vertical; min-height: 28px; overflow: hidden;">\${escapeHtml(item.url)}</textarea>
           <select onchange="updateUrlMode(\${idx}, this.value)" style="padding: 6px 24px 6px 8px; border: 1px solid var(--vscode-input-border); background: var(--vscode-input-background); color: var(--vscode-input-foreground); border-radius: 4px;">
             <option value="simple" \${mode === 'simple' ? 'selected' : ''}>Simple Browser</option>
             <option value="external" \${mode === 'external' ? 'selected' : ''}>External</option>
@@ -566,6 +630,9 @@ export class CommandFormPanel {
           <button type="button" class="btn-icon remove" onclick="removeUrl(\${idx})">×</button>
         \`;
         container.appendChild(div);
+        // Auto-resize on initial render
+        const textarea = div.querySelector('textarea');
+        autoResizeTextarea(textarea);
       });
     }
 
@@ -577,9 +644,9 @@ export class CommandFormPanel {
     function addUrl() {
       urlsData.push({ url: '', external: false, webview: false });
       renderUrls();
-      // Focus the new input
-      const inputs = document.querySelectorAll('#urlsContainer input[type="text"]');
-      if (inputs.length) inputs[inputs.length - 1].focus();
+      // Focus the new textarea
+      const textareas = document.querySelectorAll('#urlsContainer textarea');
+      if (textareas.length) textareas[textareas.length - 1].focus();
     }
 
     function updateUrl(idx, field, value) {
@@ -600,19 +667,23 @@ export class CommandFormPanel {
         const div = document.createElement('div');
         div.className = 'program-item';
 
-        const pathInput = document.createElement('input');
-        pathInput.type = 'text';
+        const pathInput = document.createElement('textarea');
+        pathInput.rows = 1;
         pathInput.className = 'program-path';
         pathInput.placeholder = 'e.g., notepad.exe';
         pathInput.value = prog.path || '';
+        pathInput.style.cssText = 'resize: vertical; min-height: 28px; overflow: hidden;';
         pathInput.addEventListener('change', () => updateProgram(idx, 'path', pathInput.value));
+        pathInput.addEventListener('input', () => autoResizeTextarea(pathInput));
 
-        const argsInput = document.createElement('input');
-        argsInput.type = 'text';
+        const argsInput = document.createElement('textarea');
+        argsInput.rows = 1;
         argsInput.className = 'program-args';
         argsInput.placeholder = 'args';
         argsInput.value = argsStr;
+        argsInput.style.cssText = 'resize: vertical; min-height: 28px; overflow: hidden;';
         argsInput.addEventListener('change', () => updateProgram(idx, 'args', argsInput.value));
+        argsInput.addEventListener('input', () => autoResizeTextarea(argsInput));
 
         const removeBtn = document.createElement('button');
         removeBtn.type = 'button';
@@ -624,15 +695,19 @@ export class CommandFormPanel {
         div.appendChild(argsInput);
         div.appendChild(removeBtn);
         container.appendChild(div);
+
+        // Auto-resize on initial render
+        autoResizeTextarea(pathInput);
+        autoResizeTextarea(argsInput);
       });
     }
 
     function addProgram() {
       programsData.push({ path: '', args: '' });
       renderPrograms();
-      // Focus the new input
-      const inputs = document.querySelectorAll('#programsContainer input.program-path');
-      if (inputs.length) inputs[inputs.length - 1].focus();
+      // Focus the new textarea
+      const textareas = document.querySelectorAll('#programsContainer textarea.program-path');
+      if (textareas.length) textareas[textareas.length - 1].focus();
     }
 
     function updateProgram(idx, field, value) {

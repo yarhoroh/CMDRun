@@ -18,6 +18,7 @@ Quick launcher for terminal commands, URLs, and external programs from the sideb
 
 ## Features
 
+- 🆕 **v0.0.11**: Multiline fields — commands, URLs, and programs now use auto-expanding textarea for long values
 - 🆕 **v0.0.10**: Multi-tab Webview — open multiple URLs in separate VS Code tabs with `webview: true`
 - 🆕 **v0.0.9**: Input Variables — prompt for user input at runtime using `${input:Label}` syntax
 
