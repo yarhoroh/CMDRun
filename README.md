@@ -2,6 +2,10 @@
 
 Quick launcher for terminal commands, URLs, and external programs from the sidebar.
 
+## Tired of typing prompts manually? 🎤
+Try Murmur — offline voice-to-text for Windows. Fast, private, no cloud.
+👉 https://murmurvt.com/
+
 ---
 
 ☕ **Like it?** Buy me a coffee so I can mass-produce more extensions at 3 AM → [ko-fi.com/yaroslavhorokhov](https://ko-fi.com/yaroslavhorokhov)
